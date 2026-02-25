@@ -1,0 +1,107 @@
+---
+# ─────────────────────────────────────────────────────────────
+# Ansible Playbook: Deploy Flask App via Docker on EC2
+# Usage: ansible-playbook -i inventory/prod deploy.yml \
+#            -e "image_tag=42 ecr_repo=xxxx.dkr.ecr.ap-south-1.amazonaws.com/flask-devops-app app_env=prod"
+# ─────────────────────────────────────────────────────────────
+
+- name: Deploy Flask DevOps App
+  hosts: app_servers
+  become: yes
+  gather_facts: yes
+
+  vars:
+    app_name: flask-devops-app
+    app_port: 5000
+    host_port: 80
+    aws_region: ap-south-1
+    container_name: "{{ app_name }}"
+
+  tasks:
+
+    # ── 1. Install Docker if not present ─────────────────────
+    - name: Install required packages
+      apt:
+        name:
+          - docker.io
+          - awscli
+          - curl
+        state: present
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Start and enable Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    # ── 2. Authenticate to AWS ECR ───────────────────────────
+    - name: Login to AWS ECR
+      shell: |
+        aws ecr get-login-password --region {{ aws_region }} | \
+        docker login --username AWS --password-stdin {{ ecr_repo }}
+      register: ecr_login
+      changed_when: true
+
+    - name: Verify ECR login
+      debug:
+        msg: "ECR login status: {{ ecr_login.stdout }}"
+
+    # ── 3. Pull the new Docker image ─────────────────────────
+    - name: Pull Docker image from ECR
+      docker_image:
+        name: "{{ ecr_repo }}:{{ image_tag }}"
+        source: pull
+        force_source: yes
+
+    # ── 4. Stop and remove existing container ────────────────
+    - name: Stop existing container (ignore if not running)
+      docker_container:
+        name: "{{ container_name }}"
+        state: stopped
+      ignore_errors: yes
+
+    - name: Remove existing container
+      docker_container:
+        name: "{{ container_name }}"
+        state: absent
+      ignore_errors: yes
+
+    # ── 5. Run new container ──────────────────────────────────
+    - name: Run new container
+      docker_container:
+        name: "{{ container_name }}"
+        image: "{{ ecr_repo }}:{{ image_tag }}"
+        state: started
+        restart_policy: always
+        ports:
+          - "{{ host_port }}:{{ app_port }}"
+        env:
+          APP_ENV: "{{ app_env }}"
+          APP_VERSION: "{{ image_tag }}"
+        log_driver: awslogs
+        log_options:
+          awslogs-region: "{{ aws_region }}"
+          awslogs-group: "/flask-devops-app/{{ app_env }}"
+          awslogs-stream: "{{ inventory_hostname }}"
+
+    # ── 6. Wait for app to come up ────────────────────────────
+    - name: Wait for application to be healthy
+      uri:
+        url: "http://localhost:{{ host_port }}/health"
+        method: GET
+        status_code: 200
+      register: health_check
+      until: health_check.status == 200
+      retries: 10
+      delay: 5
+
+    - name: Print health check result
+      debug:
+        msg: "Application is healthy: {{ health_check.json }}"
+
+    # ── 7. Cleanup old images ─────────────────────────────────
+    - name: Remove dangling Docker images
+      shell: docker image prune -f
+      changed_when: true

@@ -1,0 +1,71 @@
+---
+# ─────────────────────────────────────────────────────────────
+# Ansible Playbook: Rollback to previous Docker image
+# Triggered automatically by Jenkins on deployment failure
+# ─────────────────────────────────────────────────────────────
+
+- name: Rollback Flask App to Previous Version
+  hosts: app_servers
+  become: yes
+
+  vars:
+    app_name: flask-devops-app
+    host_port: 80
+    app_port: 5000
+    aws_region: ap-south-1
+
+  tasks:
+
+    - name: Get list of available images in ECR
+      shell: |
+        aws ecr list-images \
+          --repository-name {{ app_name }} \
+          --region {{ aws_region }} \
+          --query 'imageIds[*].imageTag' \
+          --output text | tr '\t' '\n' | grep -v latest | sort -n | tail -2 | head -1
+      register: previous_tag
+      changed_when: false
+
+    - name: Show previous image tag to rollback to
+      debug:
+        msg: "Rolling back to image tag: {{ previous_tag.stdout }}"
+
+    - name: Login to ECR
+      shell: |
+        aws ecr get-login-password --region {{ aws_region }} | \
+        docker login --username AWS --password-stdin {{ ecr_repo }}
+
+    - name: Pull previous image
+      docker_image:
+        name: "{{ ecr_repo }}:{{ previous_tag.stdout }}"
+        source: pull
+        force_source: yes
+
+    - name: Stop current container
+      docker_container:
+        name: "{{ app_name }}"
+        state: stopped
+      ignore_errors: yes
+
+    - name: Start container with previous image
+      docker_container:
+        name: "{{ app_name }}"
+        image: "{{ ecr_repo }}:{{ previous_tag.stdout }}"
+        state: started
+        restart_policy: always
+        ports:
+          - "{{ host_port }}:{{ app_port }}"
+
+    - name: Verify rollback health
+      uri:
+        url: "http://localhost:{{ host_port }}/health"
+        method: GET
+        status_code: 200
+      register: rollback_health
+      until: rollback_health.status == 200
+      retries: 5
+      delay: 5
+
+    - name: Print rollback result
+      debug:
+        msg: "Rollback to {{ previous_tag.stdout }} successful!"

@@ -1,0 +1,38 @@
+# ─────────────────────────────────────────────────────────────
+# Ansible Inventory — ALL ENVIRONMENTS
+# Replace IP addresses with your actual EC2 public IPs
+# ─────────────────────────────────────────────────────────────
+
+# ── DEV Environment ──────────────────────────────────────────
+[dev_app_servers]
+dev-app-01 ansible_host=10.0.1.10 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/dev-key.pem
+
+[dev_app_servers:vars]
+app_env=dev
+host_port=8080
+
+# ── QA Environment ───────────────────────────────────────────
+[qa_app_servers]
+qa-app-01 ansible_host=10.0.2.10 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/qa-key.pem
+
+[qa_app_servers:vars]
+app_env=qa
+host_port=80
+
+# ── PROD Environment ─────────────────────────────────────────
+[prod_app_servers]
+prod-app-01 ansible_host=10.0.3.10 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/prod-key.pem
+prod-app-02 ansible_host=10.0.3.11 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/prod-key.pem
+
+[prod_app_servers:vars]
+app_env=prod
+host_port=80
+
+# ── Group alias used in playbooks ────────────────────────────
+[app_servers:children]
+prod_app_servers
+
+# ── Common vars for all environments ─────────────────────────
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3
+ansible_ssh_common_args='-o StrictHostKeyChecking=no'

@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env
+*.egg-info/
+dist/
+build/
+.coverage
+coverage.xml
+htmlcov/
+
+# Terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.backup
+infra/terraform.tfvars     # Never commit actual values
+infra/.terraform.lock.hcl
+
+# SSH Keys
+*.pem
+*.key
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Docker
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jenkins
+.jenkins/

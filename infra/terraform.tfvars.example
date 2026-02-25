@@ -1,0 +1,12 @@
+# ─────────────────────────────────────────────────────────────
+# terraform.tfvars — copy this file and fill in your values
+# DO NOT commit actual values to Git — add to .gitignore
+# ─────────────────────────────────────────────────────────────
+
+aws_region    = "ap-south-1"
+app_name      = "flask-devops-app"
+environment   = "dev"
+vpc_cidr      = "10.0.0.0/16"
+instance_type = "t2.micro"
+key_name      = "your-key-pair-name"
+trusted_ip    = "YOUR_IP_ADDRESS/32"
